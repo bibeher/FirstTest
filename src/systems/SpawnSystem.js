@@ -99,31 +99,49 @@ export class SpawnSystem {
     }
   }
 
+  get isBossWave() { return this.wave % 5 === 0; }
+
   _buildQueue(wave) {
-    const runnerCount  = 2 + Math.floor(wave * 1.5);
-    const tankCount    = Math.floor(wave / 3);
-    const shooterCount = Math.max(0, Math.floor(wave / 6));
-    const queue        = [];
+    const isBoss = wave % 5 === 0;
+    const queue  = [];
 
-    for (let i = 0; i < runnerCount;  i++) {
-      queue.push({ type: 'runner',  delay: 0.35 + Math.random() * 0.3 });
-    }
-    for (let i = 0; i < tankCount;   i++) {
-      queue.push({ type: 'tank',    delay: 0.7  + Math.random() * 0.5 });
-    }
-    for (let i = 0; i < shooterCount; i++) {
-      queue.push({ type: 'shooter', delay: 0.9  + Math.random() * 0.4 });
+    if (isBoss) {
+      // Boss wave: fewer minions, then the boss arrives
+      const runnerCount = 1 + Math.floor(wave / 10);  // small escort
+      const tankCount   = wave >= 10 ? 1 : 0;
+      for (let i = 0; i < runnerCount; i++) {
+        queue.push({ type: 'runner', delay: 0.4 + Math.random() * 0.3 });
+      }
+      for (let i = 0; i < tankCount; i++) {
+        queue.push({ type: 'tank', delay: 0.8 });
+      }
+      // Shuffle minions then append boss last
+      for (let i = queue.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [queue[i], queue[j]] = [queue[j], queue[i]];
+      }
+      queue.push({ type: 'boss', delay: 2.5 });
+    } else {
+      const runnerCount  = 2 + Math.floor(wave * 1.5);
+      const tankCount    = Math.floor(wave / 3);
+      const shooterCount = Math.max(0, Math.floor(wave / 6));
+
+      for (let i = 0; i < runnerCount;  i++) {
+        queue.push({ type: 'runner',  delay: 0.35 + Math.random() * 0.3 });
+      }
+      for (let i = 0; i < tankCount;   i++) {
+        queue.push({ type: 'tank',    delay: 0.7  + Math.random() * 0.5 });
+      }
+      for (let i = 0; i < shooterCount; i++) {
+        queue.push({ type: 'shooter', delay: 0.9  + Math.random() * 0.4 });
+      }
+      for (let i = queue.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [queue[i], queue[j]] = [queue[j], queue[i]];
+      }
     }
 
-    // Shuffle so runners and tanks are interleaved
-    for (let i = queue.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [queue[i], queue[j]] = [queue[j], queue[i]];
-    }
-
-    // Give the very first enemy a short lead-in delay
     if (queue.length > 0) queue[0].delay = 0.6;
-
     return queue;
   }
 }

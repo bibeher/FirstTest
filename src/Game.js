@@ -1,6 +1,7 @@
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from './constants.js';
-import { InputManager } from './utils/InputManager.js';
-import { MenuScene }    from './scenes/MenuScene.js';
+import { InputManager }  from './utils/InputManager.js';
+import { AudioManager }  from './utils/AudioManager.js';
+import { MenuScene }     from './scenes/MenuScene.js';
 
 // Scenes are lazy-imported to avoid circular deps at boot
 let GameScene;
@@ -11,6 +12,7 @@ export class Game {
     this.canvas  = canvas;
     this.ctx     = canvas.getContext('2d');
     this.input   = new InputManager(canvas);
+    this.audio   = new AudioManager();
 
     canvas.width  = CANVAS_WIDTH;
     canvas.height = CANVAS_HEIGHT;

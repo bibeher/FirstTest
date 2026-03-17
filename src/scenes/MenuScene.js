@@ -102,11 +102,22 @@ export class MenuScene {
     // Help overlay
     if (this.showHelp) this._drawHelp(ctx);
 
+    // High score
+    const hs = parseInt(localStorage.getItem('topdown_highscore') ?? '0', 10);
+    if (hs > 0) {
+      ctx.fillStyle    = '#776633';
+      ctx.font         = '14px monospace';
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(`BEST SCORE  ${String(hs).padStart(6, '0')}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT - 34);
+    }
+
     // Footer
     ctx.fillStyle = '#444444';
     ctx.font      = '12px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('© 2026  |  RETRO ARCADE', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 20);
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('© 2026  |  RETRO ARCADE', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 16);
   }
 
   _drawGrid(ctx) {

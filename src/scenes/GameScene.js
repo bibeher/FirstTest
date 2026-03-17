@@ -4,6 +4,7 @@ import { Bullet }          from '../entities/Bullet.js';
 import { EnemyRunner }     from '../entities/EnemyRunner.js';
 import { EnemyTank }       from '../entities/EnemyTank.js';
 import { EnemyShooter }    from '../entities/EnemyShooter.js';
+import { EnemyBoss }       from '../entities/EnemyBoss.js';
 import { HealthPickup }    from '../entities/HealthPickup.js';
 import { ObjectPool }      from '../utils/ObjectPool.js';
 import { CollisionSystem } from '../systems/CollisionSystem.js';
@@ -24,7 +25,7 @@ export class GameScene {
 
   enter(data = {}) {
     this.player     = new Player(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
-    this.bulletPool = new ObjectPool(() => new Bullet(), 80);
+    this.bulletPool = new ObjectPool(() => new Bullet(), 100);
     this.enemies    = [];
     this.pickups    = [];
 
@@ -32,8 +33,8 @@ export class GameScene {
     this.wave     = data.wave     ?? 1;
     this.fireRate = data.fireRate ?? PLAYER_FIRE_RATE;
 
-    this.spawnSystem  = new SpawnSystem();
-    this.particles    = new ParticleSystem(300);
+    this.spawnSystem = new SpawnSystem();
+    this.particles   = new ParticleSystem(300);
 
     this.spawnSystem.startWave(this.wave);
 
@@ -43,8 +44,17 @@ export class GameScene {
     this.muzzleFlash = 0;
     this.muzzlePos   = { x: 0, y: 0 };
 
-    this._waveMsg  = { text: `WAVE  ${this.wave}`, alpha: 1.2, fadeRate: 0.35 };
+    this._waveMsg  = { text: `WAVE  ${this.wave}`, alpha: 1.3, fadeRate: 0.35, boss: false };
     this._hitFlash = 0;
+
+    // Screen shake
+    this._shake = 0;
+
+    // Active boss reference (null when no boss alive)
+    this._boss = null;
+
+    // Track last player HP for damage sound
+    this._lastPlayerHP = this.player.hp;
   }
 
   exit() {
@@ -53,7 +63,7 @@ export class GameScene {
 
   // ---------------------------------------------------------------------------
   update(dt) {
-    const { input } = this.game;
+    const { input, audio } = this.game;
 
     if (input.isDown('Escape')) {
       this.game.switchScene('menu');
@@ -64,6 +74,7 @@ export class GameScene {
     if (this.state === STATE.DYING) {
       this.dyingTimer -= dt;
       this._hitFlash   = Math.max(0, this._hitFlash - dt * 1.5);
+      this._shake      = Math.max(0, this._shake - dt * 15);
       this.particles.update(dt);
       if (this.dyingTimer <= 0) {
         this.game.switchScene('gameover', { score: this.score, wave: this.wave });
@@ -72,11 +83,13 @@ export class GameScene {
     }
 
     // --- Player ---
+    const prevHP = this.player.hp;
     this.player.update(dt, input, this.bulletPool, this.fireRate);
 
     if (this.player.justFired) {
       this.muzzleFlash = MUZZLE_TIME;
       this.muzzlePos   = { ...this.player.gunTip };
+      audio.shoot();
     }
     if (this.muzzleFlash > 0) this.muzzleFlash -= dt;
 
@@ -92,19 +105,36 @@ export class GameScene {
     const spawnEvents = this.spawnSystem.update(dt, this._liveEnemyCount());
     for (const ev of spawnEvents) {
       const enemy = this._createEnemy(ev.type, ev.x, ev.y);
-      if (enemy) this.enemies.push(enemy);
+      if (enemy) {
+        this.enemies.push(enemy);
+        if (enemy.isBoss) this._boss = enemy;
+      }
     }
 
     // --- Wave transitions ---
     if (this.spawnSystem.waveCompleted) {
-      this._showWaveMsg(`WAVE  ${this.wave}  CLEAR!`, 0.3);
+      this._showWaveMsg(`WAVE  ${this.wave}  CLEAR!`, 0.3, false);
+      audio.waveComplete();
+      this._boss = null;
     }
     if (this.spawnSystem.readyForNext) {
       this.wave++;
       if (this.wave === 5)  this.fireRate *= 0.72;
       if (this.wave === 10) this.fireRate *= 0.72;
       this.spawnSystem.startWave(this.wave);
-      this._showWaveMsg(`WAVE  ${this.wave}`, 0.38);
+
+      const isBoss = this.wave % 5 === 0;
+      this._showWaveMsg(
+        isBoss ? `⚠  BOSS  WAVE  ${this.wave}  ⚠` : `WAVE  ${this.wave}`,
+        isBoss ? 0.22 : 0.38,
+        isBoss
+      );
+      if (isBoss) {
+        audio.bossWaveStart();
+        this._shake = 8;
+      } else {
+        audio.waveStart();
+      }
     }
 
     // --- Collision ---
@@ -113,6 +143,18 @@ export class GameScene {
     for (const kill of kills) {
       this.score += Math.round(kill.score * this._scoreMultiplier());
       this.particles.spawnDeath(kill.x, kill.y, kill.enemy.deathColor ?? '#ffffff', 12);
+
+      if (kill.enemy.isBoss) {
+        audio.bossDie();
+        this._shake = 14;
+        this.particles.spawnDeath(kill.x, kill.y, '#ffcc00', 20);
+        this._boss = null;
+      } else if (kill.enemy.constructor.name === 'EnemyTank') {
+        audio.tankDie();
+      } else {
+        audio.enemyDie();
+      }
+
       if (Math.random() < HEALTH_DROP_CHANCE) {
         this.pickups.push(new HealthPickup(kill.x, kill.y));
       }
@@ -120,6 +162,17 @@ export class GameScene {
 
     for (const hit of hits) {
       this.particles.spawnHit(hit.enemy.x, hit.enemy.y, '#ffffff');
+      if (hit.enemy.isBoss) {
+        audio.bossHit();
+      } else {
+        audio.enemyHit();
+      }
+    }
+
+    // --- Player damage sound ---
+    if (this.player.hp < prevHP) {
+      audio.playerHit();
+      this._shake = Math.max(this._shake, 5);
     }
 
     // --- Pickups ---
@@ -130,6 +183,7 @@ export class GameScene {
         pk.active = false;
         this.player.heal(1);
         this.particles.spawnPickup(pk.x, pk.y);
+        audio.pickup();
       }
       if (!pk.active) this.pickups.splice(i, 1);
     }
@@ -142,32 +196,37 @@ export class GameScene {
     // --- Particles ---
     this.particles.update(dt);
 
-    // --- Wave message fade ---
+    // --- Timers ---
     if (this._waveMsg) {
       this._waveMsg.alpha -= this._waveMsg.fadeRate * dt;
       if (this._waveMsg.alpha <= 0) this._waveMsg = null;
     }
-
-    // --- Hit flash ---
     if (this._hitFlash > 0) this._hitFlash -= dt * 3;
-    if (this.player.hitFlash > 0.09) {
-      this._hitFlash = Math.max(this._hitFlash, 0.28);
-    }
+    if (this._shake    > 0) this._shake    -= dt * 18;
+    if (this.player.hitFlash > 0.09) this._hitFlash = Math.max(this._hitFlash, 0.28);
 
     // --- Player death ---
     if (this.player.hp <= 0 && this.state === STATE.PLAYING) {
       this.state      = STATE.DYING;
       this.dyingTimer = 1.8;
       this._hitFlash  = 1;
-      // Big death burst
-      this.particles.spawnDeath(this.player.x, this.player.y, COLORS.PLAYER_BODY, 20);
+      this._shake     = 12;
+      this.particles.spawnDeath(this.player.x, this.player.y, COLORS.PLAYER_BODY, 22);
     }
   }
 
   // ---------------------------------------------------------------------------
   draw(ctx) {
+    // Screen shake transform
+    const shakeX = this._shake > 0 ? (Math.random() - 0.5) * this._shake : 0;
+    const shakeY = this._shake > 0 ? (Math.random() - 0.5) * this._shake : 0;
+    if (this._shake > 0) {
+      ctx.save();
+      ctx.translate(shakeX, shakeY);
+    }
+
     ctx.fillStyle = COLORS.BG;
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.fillRect(-20, -20, CANVAS_WIDTH + 40, CANVAS_HEIGHT + 40);
     this._drawGrid(ctx);
 
     // Pickups (floor level)
@@ -195,10 +254,13 @@ export class GameScene {
     // Player
     this.player.draw(ctx);
 
-    // Particles (top layer — above everything)
+    // Particles (top layer)
     this.particles.draw(ctx);
 
-    // Red screen flash on damage / death
+    // Restore shake transform before drawing UI
+    if (this._shake > 0) ctx.restore();
+
+    // Red screen flash
     if (this._hitFlash > 0) {
       ctx.fillStyle = `rgba(255,0,0,${Math.min(0.5, this._hitFlash * 0.5)})`;
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -206,9 +268,14 @@ export class GameScene {
 
     // HUD
     const waveMsg = this._waveMsg
-      ? { text: this._waveMsg.text, alpha: Math.max(0, Math.min(1, this._waveMsg.alpha)) }
+      ? { text: this._waveMsg.text, alpha: Math.max(0, Math.min(1, this._waveMsg.alpha)), boss: this._waveMsg.boss }
       : null;
     this.hud.draw(ctx, this.player, this.score, this.wave, waveMsg);
+
+    // Boss HP bar
+    if (this._boss && this._boss.active) {
+      this.hud.drawBossBar(ctx, this._boss);
+    }
 
     // Between-wave countdown
     if (this.spawnSystem.isBetweenWaves) {
@@ -227,10 +294,10 @@ export class GameScene {
     ctx.textBaseline = 'bottom';
     ctx.fillText('ESC — Menu', CANVAS_WIDTH - 12, CANVAS_HEIGHT - 10);
 
-    // Dying fade
+    // Dying fade to black
     if (this.state === STATE.DYING) {
       const t = 1 - this.dyingTimer / 1.8;
-      ctx.fillStyle = `rgba(0,0,0,${t * 0.75})`;
+      ctx.fillStyle = `rgba(0,0,0,${t * 0.8})`;
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     }
   }
@@ -241,6 +308,7 @@ export class GameScene {
       case 'runner':  return new EnemyRunner(x, y, this.wave);
       case 'tank':    return new EnemyTank(x, y, this.wave);
       case 'shooter': return new EnemyShooter(x, y, this.wave);
+      case 'boss':    return new EnemyBoss(x, y, this.wave);
       default:
         console.warn('Unknown enemy type:', type);
         return null;
@@ -259,14 +327,12 @@ export class GameScene {
     return 1;
   }
 
-  _showWaveMsg(text, fadeRate = 0.4) {
-    this._waveMsg = { text, alpha: 1.2, fadeRate };
+  _showWaveMsg(text, fadeRate = 0.4, boss = false) {
+    this._waveMsg = { text, alpha: 1.3, fadeRate, boss };
   }
 
-  /** Quick radial overlap check for pickup collection (more forgiving than AABB). */
   _circleOverlap(a, b, radius) {
-    const dx = a.x - b.x;
-    const dy = a.y - b.y;
+    const dx = a.x - b.x, dy = a.y - b.y;
     return dx * dx + dy * dy < radius * radius;
   }
 
