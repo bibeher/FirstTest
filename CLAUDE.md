@@ -67,6 +67,23 @@ Web Audio API, lazily initializes `AudioContext` on first call (browser requires
 ### High Score
 Stored in `localStorage` under the key `topdown_highscore`. Read/written in `GameOverScene`. Displayed in `MenuScene` when non-zero.
 
+## Git Workflow
+
+After completing any meaningful unit of work — a new feature, a bug fix, a phase of development — commit and push to GitHub immediately. Work should never exist only locally.
+
+```bash
+git add <specific files>
+git commit -m "feat: short description of what and why"
+git push
+```
+
+Commit message conventions used in this repo:
+- `feat:` — new feature or capability
+- `fix:` — bug fix
+- `docs:` — documentation only
+
+Keep commit messages specific: describe *what changed and why*, not just "update files". Each commit should leave the game in a runnable state.
+
 ## Key Constants (`src/constants.js`)
 All gameplay tuning values live here: speeds, HP values, wave scaling formulas (`WAVE_SPEED_SCALE`, `WAVE_HP_SCALE`), score values, fire rates, spawn margins. Change values here, not inline in entity constructors.
 
