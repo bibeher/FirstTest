@@ -53,6 +53,7 @@ export class EnemyRunner extends Enemy {
       animSpeed:  0.15, // fast twitchy legs
       showHPBar:  false,
     });
+    this.deathColor = '#ff5533';
   }
 
   update(dt, playerX, playerY) {

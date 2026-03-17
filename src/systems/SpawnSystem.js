@@ -100,15 +100,19 @@ export class SpawnSystem {
   }
 
   _buildQueue(wave) {
-    const runnerCount = 2 + Math.floor(wave * 1.5);
-    const tankCount   = Math.floor(wave / 3);
-    const queue       = [];
+    const runnerCount  = 2 + Math.floor(wave * 1.5);
+    const tankCount    = Math.floor(wave / 3);
+    const shooterCount = Math.max(0, Math.floor(wave / 6));
+    const queue        = [];
 
-    for (let i = 0; i < runnerCount; i++) {
-      queue.push({ type: 'runner', delay: 0.35 + Math.random() * 0.3 });
+    for (let i = 0; i < runnerCount;  i++) {
+      queue.push({ type: 'runner',  delay: 0.35 + Math.random() * 0.3 });
     }
-    for (let i = 0; i < tankCount; i++) {
-      queue.push({ type: 'tank', delay: 0.7 + Math.random() * 0.5 });
+    for (let i = 0; i < tankCount;   i++) {
+      queue.push({ type: 'tank',    delay: 0.7  + Math.random() * 0.5 });
+    }
+    for (let i = 0; i < shooterCount; i++) {
+      queue.push({ type: 'shooter', delay: 0.9  + Math.random() * 0.4 });
     }
 
     // Shuffle so runners and tanks are interleaved

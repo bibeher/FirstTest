@@ -64,6 +64,7 @@ export class EnemyTank extends Enemy {
       animSpeed:  9999, // effectively no animation
       showHPBar:  true,
     });
+    this.deathColor = '#33bb44';
   }
 
   update(dt, playerX, playerY) {

@@ -39,7 +39,16 @@ export class CollisionSystem {
       }
     }
 
-    // --- Enemies vs player ---
+    // --- Enemy bullets vs player ---
+    for (const bullet of bulletPool.active) {
+      if (!bullet.active || bullet.isPlayerBullet) continue;
+      if (this._overlaps(bullet, player)) {
+        bullet.active = false;
+        player.takeDamage(bullet.damage);
+      }
+    }
+
+    // --- Enemies vs player (melee contact) ---
     for (const enemy of enemies) {
       if (!enemy.active) continue;
       if (this._overlaps(enemy, player)) {
